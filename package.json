@@ -1,10 +1,13 @@
 {
   "name": "forense-lab-mobile",
   "version": "1.0.0",
-  "description": "",
+  "description": "Prototipo de app móvil Android para análisis forense de medios (vídeo/imagen/audio), empaquetado con Capacitor.",
   "main": "image-slot.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "serve": "python3 -m http.server 8080",
+    "sync": "cp -f forenselab.html index.html image-slot.js tweaks-panel.jsx www/ && rm -rf www/app www/frames www/vendor && cp -rf app frames vendor www/ && npx cap sync android",
+    "apk": "./scripts/build-apk.sh",
+    "apk:release": "./scripts/build-apk.sh release"
   },
   "keywords": [],
   "author": "",
