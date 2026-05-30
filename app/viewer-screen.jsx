@@ -341,6 +341,7 @@ function ViewerScreen({ file, onBack, tweaks }) {
   const [modal, setModal] = useVS(null);     // 'meta' | 'transform' | 'share'
   const [toast, setToast] = useVS(null);
   const [shareName, setShareName] = useVS('');
+  const lastSavedRef = useVR(null);          // { uri, label, web } del último archivo guardado
 
   // Transcodificación automática para formatos no nativos del navegador
   useVE(() => {
@@ -522,13 +523,15 @@ function ViewerScreen({ file, onBack, tweaks }) {
     setFlashId((n) => n + 1);
     const name = `forenselab_${stampV()}.jpg`;
 
-    const guardar = (blob) => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = name; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 3000);
-      setShareName(name);
-      showToast({ icon:'camera', title:'Captura guardada', sub:name, action:'Compartir', onAction:'share' });
+    const guardar = async (blob) => {
+      try {
+        const out = await window.NativeSave.saveBlob(blob, name);
+        lastSavedRef.current = out;
+        setShareName(name);
+        showToast({ icon:'camera', title:'Captura guardada', sub: out.web ? name : `${out.label} · ${name}`, action:'Compartir', onAction:'share' });
+      } catch (e) {
+        showToast({ icon:'x', title:'No se pudo guardar la captura', sub: e.message || name, duration: 6000 });
+      }
     };
 
     setTimeout(() => {
@@ -574,16 +577,18 @@ function ViewerScreen({ file, onBack, tweaks }) {
       const name = `forenselab_${stampV()}.webm`;
       recChunksRef.current = [];
       rec.ondataavailable = (e) => { if (e.data.size > 0) recChunksRef.current.push(e.data); };
-      rec.onstop = () => {
+      rec.onstop = async () => {
         if (recordRafRef.current) { cancelAnimationFrame(recordRafRef.current); recordRafRef.current = null; }
         const blob = new Blob(recChunksRef.current, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = name; a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 3000);
-        setShareName(name);
-        showToast({ icon:'video', title:'Grabación guardada', sub:name, action:'Compartir', onAction:'share' });
         setRecording(false);
+        try {
+          const out = await window.NativeSave.saveBlob(blob, name);
+          lastSavedRef.current = out;
+          setShareName(name);
+          showToast({ icon:'video', title:'Grabación guardada', sub: out.web ? name : `${out.label} · ${name}`, action:'Compartir', onAction:'share' });
+        } catch (e) {
+          showToast({ icon:'x', title:'No se pudo guardar la grabación', sub: e.message || name, duration: 6000 });
+        }
       };
       mediaRecorderRef.current = rec;
       rec.start();
@@ -629,7 +634,14 @@ function ViewerScreen({ file, onBack, tweaks }) {
     }
   };
 
-  const onToastAction = () => { if (toast?.onAction === 'share') setModal('share'); setToast(null); };
+  const onToastAction = () => {
+    if (toast?.onAction === 'share') {
+      const saved = lastSavedRef.current;
+      if (saved && saved.uri && window.NativeSave.isNative()) window.NativeSave.shareFile(saved.uri, shareName);
+      else setModal('share');
+    }
+    setToast(null);
+  };
 
   const showZoomBar = !isMedia; // imagen: barra de zoom en lugar de reproducción
 
