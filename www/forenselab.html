@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ForenseLab Mobile — Prototipo</title>
+<!-- fuentes cargadas desde Google Fonts cuando hay conexión; el sistema usa fallback offline -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:#0B0E11; --s1:#14181D; --s2:#1B2026; --s3:#232A31;
+    --line:#272F37; --line2:#39434D;
+    --hi:#EAF0F3; --mid:#9AA7B1; --lo:#5E6B75;
+    --accent:#20D3C2; --accent-press:#15A89A; --accent-ink:#04201D;
+    --accent-glow:rgba(32,211,194,.28);
+    --danger:#FF4D52; --warn:#F5B53C; --blue:#4C8DFF;
+    --sans:'IBM Plex Sans', system-ui, sans-serif;
+    --mono:'IBM Plex Mono', ui-monospace, monospace;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; height:100%; }
+  body {
+    background: var(--bg);
+    font-family:var(--sans);
+    color:var(--hi);
+    overflow:hidden;
+  }
+  #stage {
+    position:fixed; inset:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #scaler {
+    position:relative;
+    width: min(100vw, 430px);
+    height:100%;
+    overflow:hidden;
+  }
+  #root { width:100%; height:100%; position:relative; }
+  /* hide scrollbars inside the app for a native feel */
+  .noscroll::-webkit-scrollbar { width:0; height:0; }
+  .noscroll { scrollbar-width:none; }
+  button { font-family:inherit; color:inherit; }
+  @keyframes spin     { to { transform: rotate(360deg); } }
+  @keyframes flash    { from { opacity:1; } to { opacity:0; } }
+  @keyframes recPulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+</style>
+</head>
+<body>
+  <div id="stage"><div id="scaler"><div id="root"></div></div></div>
+
+  <template id="__bundler_thumbnail">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx="20" fill="#0B0E11"/>
+      <rect x="34" y="22" width="32" height="44" rx="6" fill="none" stroke="#20D3C2" stroke-width="3"/>
+      <circle cx="50" cy="44" r="9" fill="none" stroke="#20D3C2" stroke-width="3"/>
+      <path d="M44 44h12M50 38v12" stroke="#20D3C2" stroke-width="3" stroke-linecap="round"/>
+      <path d="M40 74h20" stroke="#9AA7B1" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+  </template>
+
+  <!-- ffmpeg.wasm: se carga diferido; solo se usa cuando el navegador no puede reproducir el formato -->
+  <script defer src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+
+  <script src="vendor/react.production.min.js"></script>
+  <script src="vendor/react-dom.production.min.js"></script>
+  <script src="vendor/babel.min.js"></script>
+
+  <script src="image-slot.js"></script>
+  <script src="app/transcoder.js"></script>
+  <script type="text/babel" src="frames/android-frame.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="app/theme.jsx"></script>
+  <script type="text/babel" src="app/annotation.jsx"></script>
+  <script type="text/babel" src="app/viewer.jsx"></script>
+  <script type="text/babel" src="app/viewer-screen.jsx"></script>
+  <script type="text/babel" src="app/home.jsx"></script>
+  <script type="text/babel" src="app/app.jsx"></script>
+</body>
+</html>

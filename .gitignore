@@ -1,0 +1,26 @@
+# Sidecar de image-slot (generado en runtime)
+.image-slots.state.json
+
+# Sistemas operativos
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs y temporales
+*.log
+*.tmp
+
+# Dependencias (regenerables con `npm install`)
+node_modules/
+
+# Artefactos de compilación Android (android/ tiene además su propio .gitignore)
+*.apk
+*.aab
+android/local.properties

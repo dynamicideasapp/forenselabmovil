@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ForenseLab Mobile</string>
+    <string name="title_activity_main">ForenseLab Mobile</string>
+    <string name="package_name">com.forenselab.mobile</string>
+    <string name="custom_url_scheme">com.forenselab.mobile</string>
+</resources>
