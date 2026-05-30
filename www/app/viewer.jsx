@@ -116,24 +116,25 @@ function AnalysisGraph({ mode, values, dur, t, onSeek }) {
 
 // ───────────────────────── Controles de reproducción ─────────────────────────
 function PlaybackBar({ type, fps, t, dur, playing, onSeek, onToggle, onStep, onSkip,
-                       analysisMode, analysisValues, analyzing, onAnalyze }) {
+                       analysisMode, analysisValues, analyzing, onAnalyze, compact }) {
   const isVideo = type === 'video';
+  const bigD = compact ? 48 : 58, smD = compact ? 38 : 44;  // tamaños (compacto en horizontal)
   const ctrlBtn = (icon, on, big) => (
     <button onClick={on} style={{
-      width:big ? 58 : 44, height:big ? 58 : 44, borderRadius:'50%',
+      width:big ? bigD : smD, height:big ? bigD : smD, borderRadius:'50%',
       background:big ? 'var(--accent)' : 'transparent',
       color:big ? 'var(--accent-ink)' : 'var(--hi)',
       border:big ? 'none' : '1px solid var(--line2)',
       display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer',
       boxShadow:big ? '0 6px 20px var(--accent-glow)' : 'none', flexShrink:0,
     }}>
-      <Icon name={icon} size={big ? 26 : 20} stroke={2.2} />
+      <Icon name={icon} size={big ? (compact ? 22 : 26) : 20} stroke={2.2} />
     </button>
   );
   // Botón de paso de frame: muestra la flecha + "F" (cuadro anterior / siguiente)
   const frameBtn = (dir) => (
     <button onClick={() => onStep(dir)} title={dir < 0 ? 'Cuadro anterior' : 'Cuadro siguiente'} style={{
-      width:48, height:44, borderRadius:13, background:'transparent', color:'var(--hi)',
+      width:compact ? 42 : 48, height:smD, borderRadius:13, background:'transparent', color:'var(--hi)',
       border:'1px solid var(--line2)', display:'flex', alignItems:'center', justifyContent:'center', gap:1,
       cursor:'pointer', flexShrink:0, fontFamily:'var(--mono)', fontSize:14, fontWeight:700,
     }}>
@@ -165,9 +166,9 @@ function PlaybackBar({ type, fps, t, dur, playing, onSeek, onToggle, onStep, onS
     : analysisMode === 'audio'  ? 'Actividad de audio · toca un pico para saltar'
     : 'Análisis de actividad';
   return (
-    <div style={{ padding:'10px 16px 12px', background:'var(--s2)', borderTop:'1px solid var(--line)' }}>
+    <div style={{ padding: compact ? '5px 16px 7px' : '10px 16px 12px', background:'var(--s2)', borderTop:'1px solid var(--line)' }}>
       {/* fila de análisis: leyenda + botones RE / RA */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, marginBottom:7 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, marginBottom: compact ? 4 : 7 }}>
         <span style={{ fontFamily:'var(--mono)', fontSize:10.5, color:'var(--lo)', letterSpacing:.3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{anaLabel}</span>
         <div style={{ display:'flex', gap:6, flexShrink:0 }}>
           {isVideo && anaBtn('motion', 'RE', 'Resaltar movimiento en el vídeo')}
@@ -183,14 +184,15 @@ function PlaybackBar({ type, fps, t, dur, playing, onSeek, onToggle, onStep, onS
         <span style={{ color:'var(--hi)' }}>{fmtTime(t)}</span>
         <span>{fmtTime(dur)}</span>
       </div>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:14, marginTop:8 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap: compact ? 12 : 14, marginTop: compact ? 5 : 8 }}>
         {ctrlBtn('rewind-10', () => onSkip(-10))}
         {isVideo && frameBtn(-1)}
         {ctrlBtn(playing ? 'pause' : 'play', onToggle, true)}
         {isVideo && frameBtn(1)}
         {ctrlBtn('forward-10', () => onSkip(10))}
       </div>
-      {isVideo && (
+      {/* la línea de paso de frame se oculta en horizontal para ahorrar altura */}
+      {isVideo && !compact && (
         <div style={{ textAlign:'center', marginTop:7, fontFamily:'var(--mono)', fontSize:10, color:'var(--lo)', letterSpacing:.4 }}>
           PASO DE FRAME · {fps} FPS · {(1000/fps).toFixed(0)} ms
         </div>
@@ -200,16 +202,18 @@ function PlaybackBar({ type, fps, t, dur, playing, onSeek, onToggle, onStep, onS
 }
 
 // ───────────────────────── Barra de acciones flotante (FAB) ─────────────────────────
-function FABRail({ type, annotating, recording, fabStyle, onCapture, onRecord, onAnnotate }) {
+function FABRail({ type, annotating, recording, fabStyle, onCapture, onRecord, onAnnotate, compact }) {
   const actions = [
     { id:'cap', icon:'camera', label:'Captura', on:onCapture, active:false, danger:false },
     { id:'rec', icon:recording ? 'stop' : 'record', label:recording ? 'Detener' : 'Grabar', on:onRecord, active:recording, danger:recording },
     { id:'ann', icon:'pencil', label:'Anotar', on:onAnnotate, active:annotating, danger:false },
   ];
 
-  const labeled = fabStyle === 'labels';
+  // en horizontal se fuerzan iconos (sin etiqueta) y tamaño menor para no robar altura
+  const labeled = fabStyle === 'labels' && !compact;
+  const d = compact ? 42 : 48;
   return (
-    <div style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', zIndex:30, display:'flex', flexDirection:'column', gap:12, alignItems:'flex-end' }}>
+    <div style={{ position:'absolute', right: compact ? 10 : 12, top:'50%', transform:'translateY(-50%)', zIndex:30, display:'flex', flexDirection:'column', gap: compact ? 10 : 12, alignItems:'flex-end' }}>
       {actions.map((a) => {
         const accent = a.danger ? 'var(--danger)' : a.active ? 'var(--accent)' : null;
         return (
@@ -220,14 +224,14 @@ function FABRail({ type, annotating, recording, fabStyle, onCapture, onRecord, o
             border:`1px solid ${accent ? 'transparent' : 'var(--line2)'}`,
             borderRadius: labeled ? 24 : '50%',
             padding: labeled ? '0 16px 0 12px' : 0,
-            height:48, width: labeled ? 'auto' : 48,
+            height:d, width: labeled ? 'auto' : d,
             backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)',
             boxShadow: accent ? `0 6px 18px ${a.danger ? 'rgba(255,77,82,.4)' : 'var(--accent-glow)'}` : '0 4px 14px rgba(0,0,0,.4)',
             cursor:'pointer', flexShrink:0,
             animation: a.danger ? 'recPulse 1.4s infinite' : 'none',
           }}>
-            <span style={{ width:labeled ? 24 : '100%', height:48, display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <Icon name={a.icon} size={a.id==='rec' && recording ? 18 : 22} stroke={2.1} />
+            <span style={{ width:labeled ? 24 : '100%', height:d, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <Icon name={a.icon} size={a.id==='rec' && recording ? 18 : (compact ? 20 : 22)} stroke={2.1} />
             </span>
             {labeled && <span style={{ fontSize:13, fontWeight:600, whiteSpace:'nowrap' }}>{a.label}</span>}
           </button>
@@ -316,8 +320,11 @@ function MetaRow({ k, v }) {
     </div>
   );
 }
-function MetadataSheet({ open, onClose, file }) {
+function MetadataSheet({ open, onClose, file, liveDur, liveRes }) {
   const m = TYPE_META[file.type];
+  // Usa los datos reales del medio ya cargado si el archivo no los traía (p. ej. abierto del dispositivo)
+  const res = file.res || liveRes;
+  const dur = (file.dur && file.dur > 0) ? file.dur : (liveDur || 0);
   return (
     <Sheet open={open} onClose={onClose} title="Metadatos del archivo">
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
@@ -328,8 +335,8 @@ function MetadataSheet({ open, onClose, file }) {
       <MetaRow k="Tamaño" v={file.size} />
       <MetaRow k="Fecha de creación" v={file.created} />
       <MetaRow k="Fecha de modificación" v={file.modified} />
-      {file.res && <MetaRow k="Resolución" v={file.res + ' px'} />}
-      {file.dur != null && <MetaRow k="Duración" v={fmtTime(file.dur)} />}
+      {res && <MetaRow k="Resolución" v={res + ' px'} />}
+      {dur > 0 && <MetaRow k="Duración" v={fmtTime(dur)} />}
       {file.fps && <MetaRow k="Cuadros por segundo" v={file.fps + ' FPS'} />}
       <MetaRow k="Formato / códec" v={file.codec} />
       <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:14, padding:'10px 12px', background:'var(--accent-glow)', borderRadius:11 }}>

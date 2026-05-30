@@ -30,8 +30,9 @@ function normalizeValues(arr) {
   return arr.map((v) => v / max);
 }
 
-// Análisis de MOVIMIENTO (RE): recorre el vídeo cuadro a cuadro y mide la diferencia
-// media de píxeles entre frames consecutivos. Picos = cambios bruscos en la escena.
+// Análisis de MOVIMIENTO (RE): muestrea el vídeo SEGUNDO POR SEGUNDO y mide la diferencia
+// media de píxeles entre muestras consecutivas. Picos = cambios bruscos en la escena.
+// (antes iba cuadro a cuadro y resultaba muy lento). Usa fastSeek cuando está disponible.
 async function analyzeMotion(videoEl, dur, samples, onProgress) {
   const cw = 80, ch = 45;
   const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
@@ -44,8 +45,10 @@ async function analyzeMotion(videoEl, dur, samples, onProgress) {
     const finish = () => { if (done) return; done = true; videoEl.removeEventListener('seeked', onSeeked); res(); };
     const onSeeked = () => finish();
     videoEl.addEventListener('seeked', onSeeked);
-    try { videoEl.currentTime = time; } catch (_) {}
-    setTimeout(finish, 400); // salvaguarda si 'seeked' no dispara
+    // fastSeek salta al keyframe más cercano (más rápido); la precisión exacta no es crítica aquí
+    try { if (typeof videoEl.fastSeek === 'function') videoEl.fastSeek(time); else videoEl.currentTime = time; }
+    catch (_) { try { videoEl.currentTime = time; } catch (__) {} }
+    setTimeout(finish, 300); // salvaguarda si 'seeked' no dispara
   });
   for (let i = 0; i < samples; i++) {
     const time = Math.min(((i + 0.5) / samples) * dur, Math.max(0, dur - 0.05));
@@ -143,32 +146,57 @@ function TranscodeOverlay({ phase, progress, fileName }) {
   );
 }
 
+// ── Protector de pantalla durante el análisis (cubre el salto de frames del vídeo) ──
+function AnalysisOverlay({ analyzing }) {
+  const pct = Math.round((analyzing.progress || 0) * 100);
+  const motion = analyzing.mode === 'motion';
+  return (
+    <div style={{
+      position:'absolute', inset:0, zIndex:48,
+      background:'rgba(6,8,10,.94)', backdropFilter:'blur(10px)', WebkitBackdropFilter:'blur(10px)',
+      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:20, padding:'0 36px',
+    }}>
+      <div style={{ width:54, height:54, borderRadius:'50%', border:'3px solid var(--s3)', borderTopColor:'var(--accent)', animation:'spin 1s linear infinite', flexShrink:0 }} />
+      <div style={{ textAlign:'center' }}>
+        <div style={{ fontSize:15, fontWeight:600, color:'var(--hi)', marginBottom:6 }}>
+          {motion ? 'Analizando movimiento…' : 'Analizando audio…'}
+        </div>
+        <div style={{ fontFamily:'var(--mono)', fontSize:11.5, color:'var(--lo)' }}>
+          {motion ? 'Recorriendo el vídeo segundo por segundo' : 'Midiendo la energía del audio'}
+        </div>
+      </div>
+      <div style={{ width:'100%', maxWidth:300 }}>
+        <div style={{ height:5, borderRadius:3, background:'var(--s3)', overflow:'hidden' }}>
+          <div style={{ height:'100%', width:`${pct}%`, background:'var(--accent)', borderRadius:3, transition:'width .2s ease' }} />
+        </div>
+        <div style={{ display:'flex', justifyContent:'space-between', marginTop:8, fontFamily:'var(--mono)', fontSize:10.5, color:'var(--lo)' }}>
+          <span>{motion ? 'MOVIMIENTO (RE)' : 'AUDIO (RA)'}</span>
+          <span>{pct}%</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ───────────────────────── Barra superior ─────────────────────────
-function TopBar({ file, landscape, onRotate, onBack, onInfo }) {
+function TopBar({ file, compact, onBack, onInfo }) {
   const m = TM[file.type];
+  const sz = compact ? 34 : 38;                 // compacto en horizontal
   const iconBtn = (onClick, children) => (
-    <button onClick={onClick} style={{ width:38, height:38, borderRadius:10, background:'var(--s3)', border:'1px solid var(--line)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:'var(--hi)', flexShrink:0 }}>
+    <button onClick={onClick} style={{ width:sz, height:sz, borderRadius:10, background:'var(--s3)', border:'1px solid var(--line)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:'var(--hi)', flexShrink:0 }}>
       {children}
     </button>
   );
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', background:'var(--s2)', borderBottom:'1px solid var(--line)', flexShrink:0 }}>
-      {iconBtn(onBack, <IconV name="arrow-left" size={20} />)}
+    <div style={{ display:'flex', alignItems:'center', gap:8, padding: compact ? '5px 12px' : '10px 12px', background:'var(--s2)', borderBottom:'1px solid var(--line)', flexShrink:0 }}>
+      {iconBtn(onBack, <IconV name="arrow-left" size={compact ? 18 : 20} />)}
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:7 }}>
           <BadgeV color={m.color} bg="var(--s3)" style={{ flexShrink:0 }}><IconV name={m.icon} size={11} color={m.color} />{m.label}</BadgeV>
           <span style={{ fontFamily:'var(--mono)', fontSize:13, color:'var(--hi)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{file.name}</span>
         </div>
       </div>
-      {/* Botón de rotación: alterna entre vista vertical y horizontal */}
-      <button onClick={onRotate} title={landscape ? 'Vista vertical' : 'Vista horizontal'}
-        style={{ width:38, height:38, borderRadius:10, border:'1px solid var(--line)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0,
-          background: landscape ? 'var(--accent)' : 'var(--s3)',
-          color:      landscape ? 'var(--accent-ink)' : 'var(--hi)',
-        }}>
-        <IconV name={landscape ? 'rotate-ccw' : 'rotate-cw'} size={17} />
-      </button>
-      <button onClick={onInfo} style={{ display:'flex', alignItems:'center', gap:6, height:38, padding:'0 12px', borderRadius:10, background:'var(--s3)', border:'1px solid var(--line)', cursor:'pointer', color:'var(--hi)', fontSize:13, fontWeight:600, flexShrink:0 }}>
+      <button onClick={onInfo} style={{ display:'flex', alignItems:'center', gap:6, height:sz, padding:'0 12px', borderRadius:10, background:'var(--s3)', border:'1px solid var(--line)', cursor:'pointer', color:'var(--hi)', fontSize:13, fontWeight:600, flexShrink:0 }}>
         <IconV name="info" size={17} /> Info
       </button>
     </div>
@@ -176,25 +204,74 @@ function TopBar({ file, landscape, onRotate, onBack, onInfo }) {
 }
 
 // ───────────────────────── Lienzo de medios ─────────────────────────
-function MediaStage({ file, resolvedUrl, t, playing, zoom, setZoom, pan, setPan, annotating, showTimecode, showGrid, mediaRef, muted, onToggleMute, onImageLoad, children }) {
+function MediaStage({ file, resolvedUrl, t, playing, zoom, setZoom, pan, setPan, annotating, showTimecode, showGrid, mediaRef, muted, onToggleMute, onImageLoad, annotationLayer, children }) {
+  const stageRef = useVR(null);
   const dragRef = useVR(null);
+  const pointersRef = useVR(new Map());   // pointerId → { x, y } (multitáctil)
+  const pinchRef = useVR(null);
+
+  // Limita el desplazamiento para que el contenido no se salga del encuadre.
+  const clampPan = (p, z) => {
+    const el = stageRef.current; if (!el) return p;
+    const r = el.getBoundingClientRect();
+    const mx = Math.max(0, (z - 1) * r.width / 2);
+    const my = Math.max(0, (z - 1) * r.height / 2);
+    return { x: clamp(p.x, -mx, mx), y: clamp(p.y, -my, my) };
+  };
+
   const onDown = (e) => {
-    if (annotating || zoom <= 1) return;
-    dragRef.current = { x:e.clientX, y:e.clientY, px:pan.x, py:pan.y };
+    if (annotating) return;                 // anotando: el lienzo gestiona el toque
+    pointersRef.current.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    if (pointersRef.current.size === 2) {
+      // pellizco (pinch): dos dedos
+      const pts = [...pointersRef.current.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+      const mid = { x:(pts[0].x + pts[1].x) / 2, y:(pts[0].y + pts[1].y) / 2 };
+      const r = e.currentTarget.getBoundingClientRect();
+      pinchRef.current = { startDist:dist, startZoom:zoom, startPan:{ ...pan },
+        cx:r.left + r.width / 2, cy:r.top + r.height / 2, startMid:mid };
+      dragRef.current = null;
+    } else if (pointersRef.current.size === 1 && zoom > 1) {
+      dragRef.current = { x:e.clientX, y:e.clientY, px:pan.x, py:pan.y };
+    }
   };
   const onMove = (e) => {
-    if (!dragRef.current) return;
-    setPan({ x:dragRef.current.px + (e.clientX - dragRef.current.x), y:dragRef.current.py + (e.clientY - dragRef.current.y) });
+    if (pointersRef.current.has(e.pointerId)) pointersRef.current.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    const pinch = pinchRef.current;
+    if (pinch && pointersRef.current.size >= 2) {
+      const pts = [...pointersRef.current.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+      const mid = { x:(pts[0].x + pts[1].x) / 2, y:(pts[0].y + pts[1].y) / 2 };
+      const z = clamp(pinch.startZoom * (dist / pinch.startDist), 1, 5);
+      // punto de contenido bajo el foco inicial (relativo al centro del encuadre)
+      const ox = (pinch.startMid.x - pinch.cx - pinch.startPan.x) / pinch.startZoom;
+      const oy = (pinch.startMid.y - pinch.cy - pinch.startPan.y) / pinch.startZoom;
+      // mantenerlo bajo el foco actual: permite acercar y arrastrar a la vez
+      const np = z <= 1 ? { x:0, y:0 } : { x:mid.x - pinch.cx - ox * z, y:mid.y - pinch.cy - oy * z };
+      setZoom(z);
+      setPan(clampPan(np, z));
+      return;
+    }
+    if (dragRef.current) {
+      setPan(clampPan({ x:dragRef.current.px + (e.clientX - dragRef.current.x), y:dragRef.current.py + (e.clientY - dragRef.current.y) }, zoom));
+    }
   };
-  const onUp = () => { dragRef.current = null; };
+  const onUp = (e) => {
+    if (e && e.pointerId != null) pointersRef.current.delete(e.pointerId);
+    else pointersRef.current.clear();
+    if (pointersRef.current.size < 2) pinchRef.current = null;
+    if (pointersRef.current.size === 0) dragRef.current = null;
+  };
 
   const isAudio = file.type === 'audio';
   const transform = `translate(${pan.x}px,${pan.y}px) scale(${zoom})`;
+  const interacting = !!(dragRef.current || pinchRef.current);
 
   return (
-    <div onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}
+    <div ref={stageRef} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onPointerLeave={onUp}
       onDoubleClick={() => { setZoom(1); setPan({ x:0, y:0 }); }}
       style={{ position:'absolute', inset:0, overflow:'hidden', background:'#06080a', display:'flex', alignItems:'center', justifyContent:'center',
+        touchAction:'none',
         cursor: (!annotating && zoom > 1) ? 'grab' : 'default' }}>
 
       {isAudio ? (
@@ -220,7 +297,7 @@ function MediaStage({ file, resolvedUrl, t, playing, zoom, setZoom, pan, setPan,
               </div>
             </div>
           )}
-          <div style={{ position:'absolute', inset:0, transform, transformOrigin:'center', transition: dragRef.current ? 'none' : 'transform .18s' }}>
+          <div style={{ position:'absolute', inset:0, transform, transformOrigin:'center', transition: interacting ? 'none' : 'transform .18s' }}>
             {resolvedUrl ? (
               file.type === 'video' ? (
                 <video ref={mediaRef} src={resolvedUrl} preload="auto" playsInline muted={muted}
@@ -234,9 +311,14 @@ function MediaStage({ file, resolvedUrl, t, playing, zoom, setZoom, pan, setPan,
               <image-slot id={file.slot} fit="contain" shape="rect" placeholder=" "
                 style={{ position:'absolute', inset:0, width:'100%', height:'100%', color:'rgba(233,240,243,.45)' }}></image-slot>
             )}
+            {/* la capa de anotación vive DENTRO del transform: sigue el zoom y el desplazamiento */}
+            {annotationLayer}
           </div>
         </React.Fragment>
       )}
+
+      {/* audio: la capa de anotación va a nivel de escena (el audio no tiene zoom) */}
+      {isAudio && annotationLayer}
 
       {/* botón de silencio (vídeo y audio con archivo real) */}
       {resolvedUrl && file.type !== 'image' && (
@@ -283,30 +365,21 @@ function ViewerScreen({ file, onBack, tweaks }) {
   const mediaRef = useVR(null);
   const [zoom, setZoom] = useVS(1);
   const [pan, setPan] = useVS({ x:0, y:0 });
-  const [landscape, setLandscape] = useVS(false);
-
-  // ── Gestión de orientación: modifica #scaler para simular rotación del dispositivo ──
-  // Efecto único en mount: aplica transición CSS y limpia al desmontar
+  // ── Orientación automática del dispositivo ──
+  // Detecta la rotación real (ancho > alto) y redimensiona #scaler para llenar la
+  // pantalla en horizontal (sin franjas negras). En vertical vuelve al ancho de teléfono.
+  const [landscape, setLandscape] = useVS(() => window.innerWidth > window.innerHeight);
   useVE(() => {
     const scaler = document.getElementById('scaler');
-    if (!scaler) return;
-    scaler.style.transition = 'width 0.35s ease, height 0.35s ease';
-    return () => {
-      scaler.style.transition = '';
-      scaler.style.width  = '';
-      scaler.style.height = '';
-    };
-  }, []);
-
-  // Efecto reactivo al estado landscape: redimensiona el scaler
-  useVE(() => {
-    const scaler = document.getElementById('scaler');
-    if (!scaler) return;
+    if (scaler) scaler.style.transition = 'width 0.3s ease, height 0.3s ease';
     const apply = () => {
-      if (landscape) {
-        // Landscape: ancho de teléfono apaisado (≈908px), alto de teléfono portrait (≈430px)
-        scaler.style.width  = Math.min(window.innerWidth,  908) + 'px';
-        scaler.style.height = Math.min(window.innerHeight, 430) + 'px';
+      const land = window.innerWidth > window.innerHeight;
+      setLandscape(land);
+      if (!scaler) return;
+      if (land) {
+        // horizontal: usa toda la pantalla (con tope razonable para tablets/escritorio)
+        scaler.style.width  = Math.min(window.innerWidth,  1000) + 'px';
+        scaler.style.height = Math.min(window.innerHeight,  520) + 'px';
       } else {
         scaler.style.width  = '';
         scaler.style.height = '';
@@ -314,8 +387,13 @@ function ViewerScreen({ file, onBack, tweaks }) {
     };
     apply();
     window.addEventListener('resize', apply);
-    return () => window.removeEventListener('resize', apply);
-  }, [landscape]);
+    window.addEventListener('orientationchange', apply);
+    return () => {
+      window.removeEventListener('resize', apply);
+      window.removeEventListener('orientationchange', apply);
+      if (scaler) { scaler.style.transition = ''; scaler.style.width = ''; scaler.style.height = ''; }
+    };
+  }, []);
 
   // URL resuelta: empieza con file.url (null si hay que transcodificar) y se reemplaza al terminar
   const [resolvedUrl, setResolvedUrl] = useVS(file.url);
@@ -459,23 +537,30 @@ function ViewerScreen({ file, onBack, tweaks }) {
 
   const showToast = (obj) => setToast({ ...obj, id: Date.now() });
 
+  // zoom por botones (imagen): al volver a 1× recentra el contenido
+  const zoomBy = (d) => {
+    const nz = clamp(+(zoom + d).toFixed(1), 1, 5);
+    setZoom(nz);
+    if (nz === 1) setPan({ x: 0, y: 0 });
+  };
+
   // acciones de reproducción
   const onToggle = () => setPlaying((p) => !p);
   const onSeek = (v) => {
     const c = clamp(v, 0, dur);
     setT(c);
-    if (mediaRef.current && file.url) mediaRef.current.currentTime = c;
+    if (mediaRef.current && resolvedUrl) mediaRef.current.currentTime = c;
   };
   const onSkip = (d) => {
     const newT = clamp(t + d, 0, dur);
     setT(newT);
-    if (mediaRef.current && file.url) mediaRef.current.currentTime = newT;
+    if (mediaRef.current && resolvedUrl) mediaRef.current.currentTime = newT;
   };
   const onStep = (dir) => {
     setPlaying(false);
     const newT = clamp(t + dir * (1 / (file.fps || 30)), 0, dur);
     setT(newT);
-    if (mediaRef.current && file.url) mediaRef.current.currentTime = newT;
+    if (mediaRef.current && resolvedUrl) mediaRef.current.currentTime = newT;
   };
 
   // análisis de actividad: ejecuta (o alterna) RE/RA. Regla: solo un gráfico a la vez.
@@ -490,12 +575,16 @@ function ViewerScreen({ file, onBack, tweaks }) {
       const onP = (p) => setAnalyzing({ mode, progress: p });
       let values;
       if (mode === 'motion') {
+        // una muestra por SEGUNDO (antes 120 fijas con seek preciso, demasiado lento).
+        // Topes: mínimo 12 (clips muy cortos siguen mostrando barras) y máximo 180 (clips largos).
+        const secs = Math.round(dur || (el && el.duration) || file.dur || 1);
+        const samples = Math.max(12, Math.min(180, secs));
         if (el && resolvedUrl && el.videoWidth) {
           suppressTimeRef.current = true;
-          try { values = await analyzeMotion(el, dur || el.duration || file.dur || 1, 120, onP); }
+          try { values = await analyzeMotion(el, dur || el.duration || file.dur || 1, samples, onP); }
           finally { suppressTimeRef.current = false; }
         } else {
-          values = simulatedProfile('motion', 120);
+          values = simulatedProfile('motion', samples);
         }
       } else {
         if (resolvedUrl) {
@@ -666,24 +755,21 @@ function ViewerScreen({ file, onBack, tweaks }) {
 
   return (
     <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', background:'var(--bg)' }}>
-      <TopBar file={file} landscape={landscape} onRotate={() => setLandscape(l => !l)} onBack={onBack} onInfo={() => setModal('meta')} />
+      <TopBar file={file} compact={landscape} onBack={onBack} onInfo={() => setModal('meta')} />
 
       {/* zona central */}
       <div style={{ position:'relative', flex:1, minHeight:0 }}>
         <MediaStage file={file} resolvedUrl={resolvedUrl} t={t} playing={playing} zoom={zoom} setZoom={setZoom} pan={pan} setPan={setPan}
           annotating={annotating} showTimecode={tweaks.showTimecode} showGrid={tweaks.showGrid} mediaRef={mediaRef}
           muted={muted} onToggleMute={() => setMuted((m) => !m)}
-          onImageLoad={(w, h) => { setNatW(w); setNatH(h); }}>
+          onImageLoad={(w, h) => { setNatW(w); setNatH(h); }}
+          annotationLayer={
+            <AnnLayer active={annotating} tool={tool} color={color} widthIdx={widthIdx} shapes={shapes} onCommit={commitShape} exportRef={annCanvasRef} natW={natW} natH={natH} />
+          }>
 
-          {/* botón de play central (vídeo en pausa, sin anotar, sin transcodificar) */}
-          {file.type === 'video' && !playing && !annotating && xcodePhase !== 'loading' && xcodePhase !== 'running' && (
-            <button onClick={onToggle} style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:72, height:72, borderRadius:'50%', background:'rgba(8,12,15,.55)', border:'1px solid rgba(255,255,255,.22)', backdropFilter:'blur(4px)', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', cursor:'pointer' }}>
-              <IconV name="play" size={30} color="#fff" />
-            </button>
-          )}
+          {/* (sin botón de play central: estorba al revisar el cuadro; se usa el de la barra inferior) */}
 
-          {/* capa de anotación */}
-          <AnnLayer active={annotating} tool={tool} color={color} widthIdx={widthIdx} shapes={shapes} onCommit={commitShape} exportRef={annCanvasRef} natW={natW} natH={natH} />
+          {/* (la capa de anotación se pasa como prop annotationLayer para que siga el zoom) */}
 
           {/* indicador REC */}
           {recording && (
@@ -699,9 +785,9 @@ function ViewerScreen({ file, onBack, tweaks }) {
           {/* barra de zoom (imagen) */}
           {showZoomBar && !annotating && (
             <div style={{ position:'absolute', bottom:14, left:'50%', transform:'translateX(-50%)', display:'flex', alignItems:'center', gap:4, background:'rgba(8,12,15,.7)', border:'1px solid var(--line2)', borderRadius:12, padding:4, backdropFilter:'blur(6px)' }}>
-              <button onClick={() => setZoom((z) => clamp(+(z - 0.5).toFixed(1), 1, 5))} style={zbtn}><IconV name="zoom-out" size={18} /></button>
+              <button onClick={() => zoomBy(-0.5)} style={zbtn}><IconV name="zoom-out" size={18} /></button>
               <span style={{ fontFamily:'var(--mono)', fontSize:12, color:'var(--hi)', minWidth:42, textAlign:'center' }}>{Math.round(zoom*100)}%</span>
-              <button onClick={() => setZoom((z) => clamp(+(z + 0.5).toFixed(1), 1, 5))} style={zbtn}><IconV name="zoom-in" size={18} /></button>
+              <button onClick={() => zoomBy(0.5)} style={zbtn}><IconV name="zoom-in" size={18} /></button>
             </div>
           )}
 
@@ -711,13 +797,16 @@ function ViewerScreen({ file, onBack, tweaks }) {
           {/* FAB (oculto durante anotación y transcodificación) */}
           {!annotating && xcodePhase !== 'loading' && xcodePhase !== 'running' && (
             <FABRail type={file.type} annotating={annotating} recording={recording} fabStyle={tweaks.fabStyle}
-              onCapture={capture} onRecord={toggleRecord} onAnnotate={toggleAnnotate} />
+              onCapture={capture} onRecord={toggleRecord} onAnnotate={toggleAnnotate} compact={landscape} />
           )}
 
           {/* Overlay de transcodificación */}
           {(xcodePhase === 'loading' || xcodePhase === 'running') && (
             <TranscodeOverlay phase={xcodePhase} progress={xcodeProgress} fileName={file.name} />
           )}
+
+          {/* Protector de pantalla durante el análisis RE/RA (oculta el preview del vídeo) */}
+          {analyzing && <AnalysisOverlay analyzing={analyzing} />}
         </MediaStage>
       </div>
 
@@ -729,11 +818,12 @@ function ViewerScreen({ file, onBack, tweaks }) {
         <PlaybackBar type={file.type} fps={file.fps || 30} t={t} dur={dur} playing={playing}
           onSeek={onSeek} onToggle={onToggle} onStep={onStep} onSkip={onSkip}
           analysisMode={analysisMode} analysisValues={analysisMode ? analyses[analysisMode] : null}
-          analyzing={analyzing} onAnalyze={runAnalysis} />
+          analyzing={analyzing} onAnalyze={runAnalysis} compact={landscape} />
       ) : null}
 
       {/* modales */}
-      <MetadataSheet open={modal === 'meta'} onClose={() => setModal(null)} file={file} />
+      <MetadataSheet open={modal === 'meta'} onClose={() => setModal(null)} file={file}
+        liveDur={dur} liveRes={natW > 0 && natH > 0 ? `${natW}×${natH}` : null} />
       <ShareSheet open={modal === 'share'} onClose={() => setModal(null)} fileName={shareName} />
 
       <ToastV toast={toast} onAction={onToastAction} onDone={() => setToast(null)} />
