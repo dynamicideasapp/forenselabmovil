@@ -5,6 +5,22 @@ const { Waveform, AnalysisGraph, PlaybackBar, FABRail, AnnotateToolbar, Metadata
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+// ── Preferencias de anotación persistentes ──
+// Recuerda la última herramienta, color y grosor usados. Persisten al abrir otro
+// archivo y entre reinicios de la app (localStorage del WebView).
+const ANNOT_KEY = 'forenselab.annot.v1';
+function readAnnotPrefs() {
+  const def = { tool: 'free', color: '#FF4D52', widthIdx: 1 };
+  try {
+    const raw = localStorage.getItem(ANNOT_KEY);
+    if (raw) return { ...def, ...JSON.parse(raw) };
+  } catch (_) {}
+  return def;
+}
+function writeAnnotPrefs(p) {
+  try { localStorage.setItem(ANNOT_KEY, JSON.stringify(p)); } catch (_) {}
+}
+
 // ───────────────────────── Motor de análisis de actividad ─────────────────────────
 // Normaliza un arreglo de valores al rango 0..1 según su máximo.
 function normalizeValues(arr) {
@@ -311,9 +327,11 @@ function ViewerScreen({ file, onBack, tweaks }) {
 
   // anotación
   const [annotating, setAnnotating] = useVS(false);
-  const [tool, setTool] = useVS('free');
-  const [color, setColor] = useVS('#FF4D52');
-  const [widthIdx, setWidth] = useVS(1);
+  const [tool, setTool] = useVS(() => readAnnotPrefs().tool);
+  const [color, setColor] = useVS(() => readAnnotPrefs().color);
+  const [widthIdx, setWidth] = useVS(() => readAnnotPrefs().widthIdx);
+  // persiste la última selección de anotación (herramienta/color/grosor)
+  useVE(() => { writeAnnotPrefs({ tool, color, widthIdx }); }, [tool, color, widthIdx]);
   const [shapes, setShapes] = useVS([]);
   // dimensiones naturales del contenido (vídeo: videoWidth/videoHeight; imagen: naturalWidth/naturalHeight)
   const [natW, setNatW] = useVS(0);
