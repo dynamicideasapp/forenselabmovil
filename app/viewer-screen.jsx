@@ -525,7 +525,7 @@ function ViewerScreen({ file, onBack, tweaks }) {
 
     const guardar = async (blob) => {
       try {
-        const out = await window.NativeSave.saveBlob(blob, name);
+        const out = await window.NativeSave.saveBlob(blob, name, { kind:'image', mimeType:'image/jpeg' });
         lastSavedRef.current = out;
         setShareName(name);
         showToast({ icon:'camera', title:'Captura guardada', sub: out.web ? name : `${out.label} · ${name}`, action:'Compartir', onAction:'share' });
@@ -582,7 +582,8 @@ function ViewerScreen({ file, onBack, tweaks }) {
         const blob = new Blob(recChunksRef.current, { type: mimeType });
         setRecording(false);
         try {
-          const out = await window.NativeSave.saveBlob(blob, name);
+          const kind = file.type === 'audio' ? 'audio' : 'video';
+          const out = await window.NativeSave.saveBlob(blob, name, { kind, mimeType: mimeType || blob.type });
           lastSavedRef.current = out;
           setShareName(name);
           showToast({ icon:'video', title:'Grabación guardada', sub: out.web ? name : `${out.label} · ${name}`, action:'Compartir', onAction:'share' });

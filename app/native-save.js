@@ -21,19 +21,17 @@
     return 'Almacenamiento de la app · ForenseLab';
   }
 
-  // Guarda el blob.
-  //  - Navegador: descarga clásica (devuelve { web:true }).
-  //  - Android nativo: escribe en ForenseLab/<name>. Intenta Documentos (visible);
-  //    si la versión de Android lo impide, cae a externo y luego a almacenamiento privado.
-  //    Siempre devuelve { uri, directory, label } para poder compartir después.
-  async function saveBlob(blob, name) {
-    if (!isNative()) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = name; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 3000);
-      return { web: true, uri: null, label: name };
-    }
+  // Deduce el tipo a partir del nombre cuando no se indica explícitamente.
+  function guessKind(name) {
+    const ext = (name.split('.').pop() || '').toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) return 'image';
+    if (['mp4', 'mov', 'mkv', 'webm'].includes(ext)) return 'video';
+    if (['mp3', 'wav', 'ogg', 'm4a', 'aac'].includes(ext)) return 'audio';
+    return 'image';
+  }
+
+  // Escribe en Documentos/ForenseLab (fallback no destructivo). Devuelve { uri, label }.
+  async function saveToDocuments(blob, name) {
     const Filesystem = Cap.Plugins && Cap.Plugins.Filesystem;
     if (!Filesystem) throw new Error('Plugin Filesystem no disponible (ejecuta cap sync)');
     const data = await blobToBase64(blob);
@@ -46,6 +44,41 @@
       } catch (e) { lastErr = e; }
     }
     throw lastErr || new Error('No se pudo escribir el archivo');
+  }
+
+  // Guarda el blob.
+  //  - Navegador: descarga clásica (devuelve { web:true }).
+  //  - Android nativo:
+  //      · imágenes y vídeos → Galería vía MediaStore (Pictures/ForenseLab y Movies/ForenseLab),
+  //        con scoped storage y sin permisos legacy. Si falla, cae a Documentos.
+  //      · audio y demás → Documentos/ForenseLab (la galería no muestra audio).
+  //    Siempre devuelve { uri, label } para poder compartir después.
+  async function saveBlob(blob, name, opts) {
+    opts = opts || {};
+    if (!isNative()) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+      return { web: true, uri: null, label: name };
+    }
+    const kind = opts.kind || guessKind(name);
+    const mimeType = opts.mimeType || blob.type || 'application/octet-stream';
+
+    // Imágenes y vídeos → Galería (MediaStore).
+    if (kind === 'image' || kind === 'video') {
+      const MediaStoreSaver = Cap.Plugins && Cap.Plugins.MediaStoreSaver;
+      if (MediaStoreSaver) {
+        try {
+          const data = await blobToBase64(blob);
+          const r = await MediaStoreSaver.saveMedia({ data, name, mimeType, kind, album: 'ForenseLab' });
+          const label = kind === 'video' ? 'Galería · Movies/ForenseLab' : 'Galería · Pictures/ForenseLab';
+          return { uri: r && r.uri, label, kind, web: false };
+        } catch (_) { /* la galería falló → cae a Documentos */ }
+      }
+    }
+    // Audio, otros tipos, o fallback si la galería no estuvo disponible.
+    return saveToDocuments(blob, name);
   }
 
   // Comparte un archivo ya guardado (en nativo via plugin Share; en web via navigator.share).
