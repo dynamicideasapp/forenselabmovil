@@ -3,7 +3,8 @@
 const { useRef: useRefA, useEffect: useEffectA, useState: useStateA } = React;
 
 // Grosores en píxeles según el ajuste fino / medio / grueso (índice 0..2)
-const STROKE_W = [3.5, 7, 12];
+// Reducidos un 35% respecto a los originales [3.5, 7, 12].
+const STROKE_W = [2.28, 4.55, 7.8];
 
 // Dibuja una figura en el contexto 2D.
 // sh.x0/y0/x1/y1 y sh.points[].x/y son normalizados [0,1].
